@@ -1,0 +1,22 @@
+This package will allow multiple people to write entries into 
+a logfile without overwriting each others entries - which can 
+happen when an editor is used.
+
+Description:
+   turnover.pl - the actual turnover program
+   archlogview.pl - the archived logfile viewer.
+
+
+Configure:
+   You will need to set the $pathprefix (towards the tops of these scripts) to the 
+   path where the turnover directory is located.
+
+Arguments:
+   If a "-loc" argument is used, turnover will look in the current directory
+   for the logfile "turnover.log"
+
+
+Fri May 14 16:25:31 CDT 1999
+
+Monty Scroggins
+Monty4@flash.net
