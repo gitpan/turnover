@@ -43,57 +43,13 @@
 #   Changed color of new entry bar to be more pleasant since the bar is now
 #   extended to 80 chars.
 #
-# Monty Scroggins Wed May 5 22:45:47 GMT 1999
-#   Cleaned up the text formatting routine a bit.  Added pod lines
+# Monty Scroggins Tue Jun 15 14:31:33 CDT 1999 
+#   Added some optionadd settings, reduced the number of definitions required for
+#   all of the widgets.  Added code to change the icon name when new entries are
+#   detected.  
+#
 ################################################################################
 #
-
-#the current version
-local $VERSION="1.7.0";
-
-=head1 NAME
-
-Turnover - a shared logfile manager. 
-
-=head1 DESCRIPTION
-
-Turnover features:
-
-=over 4
-
-Allows multiple people to make logfile entries concurrently without overwriting 
-each others logfile entries.
-
-View the logfile entries with colorization for easy delineation.
-
-View archived logfiles with the same colorization.
-
-Perform incremental or standard searches.
-
-Timestamps can be manually set to enter a logfile entry for a specific date/time.
-
-=back
-
-=head1 PREREQUISITES
-
-This script requires the following non-core Perl Modules:
-
-=over 4
-
-C<Tk Toolkit>
-
-C<Tk::HistEntry>
-
-=back
-
-
-=pod SCRIPT CATEGORIES
-
-CPAN/Administrative
-Fun/Educational
-
-=cut
-
 use Tk;
 use Tk::Dialog;
 use Tk::ROText;
@@ -105,8 +61,6 @@ $|=1; # set output buffering to off
 $[ = 0; # set array base to 0
 $, = ' '; # set output field separator
 $\ = "\n"; # set output record separator to null
-
-$VERSION=1.7;
 
 #The colors
 $txtbackground="snow2";
@@ -133,7 +87,11 @@ $archviewer="$pathprefix/archlogview.pl";
 #the direcotry where the archived logs are kept
 $archivedir="$pathprefix/archive";
 
+#the system command to execute when "edit" is selected 
 $editcommand="nedit -tabs 8 -nowrap -autosave -xrm \"nedit.emulateTabs: 8\" ";
+
+#the amount of time to sleep until checking for logfile modifications
+$timer=300;
 
 #if the "-local" argument is specified, use the local directory 
 #for data instead of going to the real log
@@ -143,7 +101,7 @@ if ($ARGV[0] =~ /^\-loc/i) {
    $pidfile="turnover.pid";
    $logfile="turnover.log";
    $archviewer="archlogview.pl";
-   }
+   }#if
   
 #short wrap is the wrap point for any text entered into the new item widget
 $wrap=82;
@@ -151,16 +109,13 @@ $wrap=82;
 #null out the history list for the search dialog
 my @searchlist="";  
 
-#get the current date info
-($year,$month,$day,$hour,$minute,$seconds)=split(",",`date '+%Y,%m,%d,%H,%M,%S'`);
-
 #define the help text for the help window
 $helptext="
  $0
  
  This utility is used to update the turnover logfile. Multiple 
  users can safely use turnover.pl to make log entries concurrently
- without the worry of over-writing each others entries.
+ without the worry of over-writing each others data.
  
  
  The Sliders are:
@@ -212,8 +167,8 @@ $helptext="
  
  -------------------------------------------------------------------------
  
- Version 1.5
- Wed Apr 14 14:26:51 CDT 1999
+ Version 1.6
+ Tue Jun 15 14:33:18 CDT 1999
  
 ";
 
@@ -224,10 +179,14 @@ $helptext="
 &check_inuse;
 #if the delete pid dialog was cancelled off, exit;
 if ($fileclosed==0) {
-  exit;
-  };
+   exit;
+   };
   
-&readin;
+$mtime=(stat($logfile))[9];
+&readin; 
+$SIG{ALRM} = \&reread; 
+alarm $timer; # schedule alarm in $timer seconds 
+
 MainLoop;
 #  
 #########################################################################
@@ -290,12 +249,10 @@ sub readin {
    return if ($fileclosed==0);
    # The main window
    $MW = MainWindow->new;
-
+     
    #set the window title
    $MW->configure(
-      -title=>"Turnover Log as of $year$month$day $hour:$minute:$seconds",
       -background=>$background,
-      -foreground=>$txtforeground,
       -borderwidth=>0,
       -highlightthickness=>0,
       -relief=>'flat',
@@ -304,14 +261,17 @@ sub readin {
    #width,height in lines    
    $MW->minsize(92,30);
    $MW->maxsize(92,50);
+   $MW->iconname('Turnover');
 
+   $MW->optionAdd("*background","$background"); 
+   $MW->optionAdd("*foreground","$txtforeground");
+   $MW->optionAdd("*highlightThickness", "0");  
+   $MW->optionAdd("*font", "$windowfont");  
+   
    #log text frame
    $logframe2=$MW->Frame(
       -borderwidth=>'0',
       -relief=>'flat',
-      -background=>$background,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
       )->pack(
          -expand=>1,
          -fill=>'both',
@@ -323,9 +283,6 @@ sub readin {
    $logframe3=$MW->Frame(
       -borderwidth=>'0',
       -relief=>'flat',
-      -background=>$background,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
       )->pack(
          -pady=>'2',
          -padx=>'1',
@@ -337,8 +294,6 @@ sub readin {
       -borderwidth=>'1',
       -relief=>'raised',
       -background=>$standout,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
       )->pack(
          -fill=>'x',
          -pady=>'4',
@@ -349,9 +304,6 @@ sub readin {
    $logframe5=$logframe4->Frame(
       -borderwidth=>'1',
       -relief=>'sunken',
-      -background=>$background,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
       )->pack(
          -pady=>'2',
          -padx=>2,
@@ -364,9 +316,6 @@ sub readin {
    $logframe6=$MW->Frame(
       -borderwidth=>'0',
       -relief=>'flat',
-      -background=>$background,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
       )->pack(
          -fill=>'x',
          -pady=>'2',
@@ -377,8 +326,6 @@ sub readin {
    $scrollx=$logframe2->Scrollbar(
       -orient=>'horiz',
       -elementborderwidth=>1,
-      -highlightthickness=>0,
-      -background=>$background,
       -troughcolor=>$troughbackground,
       -relief=>'flat',
       )->pack(
@@ -389,8 +336,6 @@ sub readin {
    $scrolly=$logframe2->Scrollbar(
       -orient=>'vert',
       -elementborderwidth=>1,
-      -highlightthickness=>0,
-      -background=>$background,
       -troughcolor=>$troughbackground,
       -relief=>'flat',
       )->pack(
@@ -402,11 +347,8 @@ sub readin {
    $loglist=$logframe2->ROText(
       -xscrollcommand=>['set', $scrollx],
       -yscrollcommand=>['set', $scrolly],
-      -font=>$windowfont,
       -relief=>'sunken',
-      -highlightthickness=>0,
       -background=>$txtbackground,
-      -foreground=>$txtforeground,
       -selectforeground=>$txtforeground,
       -selectbackground=>'#c0d0c0',
       -wrap=>'none',
@@ -420,16 +362,15 @@ sub readin {
 
    $scrollx->configure(-command => ['xview', $loglist]);
    $scrolly->configure(-command => ['yview', $loglist]);
-
+   #this binding has to be set on one of the subwidgets.  If it is set for the
+   #toplevel, it will be executed for each subwidget (~29 times)
+   $loglist->bind("<Unmap>",\&set_normal_icon);
    ##############################################################
    #The log entry section
 
    #spacing for the ruler label.. This label is not seen.
    $logframe3->Label(
       -text=>'',
-      -background=>$background,
-      -foreground=>$txtforeground,
-      -font=>$windowfont,
       -width=>7,
       )->pack(
          -pady=>0,
@@ -443,9 +384,6 @@ sub readin {
    $logframe3->Label(
       -text=>'.........1.........2.........3.........4.........5.........6.........7.........8',
       -borderwidth=>'0',
-      -background=>$background,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
       -font=>'8x13',
       )->pack(
          -padx=>2,
@@ -456,8 +394,6 @@ sub readin {
    $entrylistscroll=$logframe3->Scrollbar(
       -orient=>'vert',
       -elementborderwidth=>1,
-      -highlightthickness=>0,
-      -background=>$background,
       -troughcolor=>$troughbackground,
       -relief=>'flat',
       )->pack(
@@ -468,7 +404,6 @@ sub readin {
    #the editable text entry widget
    $entrylist=$logframe3->Text(
       -yscrollcommand=>['set', $entrylistscroll],
-      -font=>$windowfont,
       -relief=>'sunken',
       -highlightthickness=>1,
       -highlightcolor=>'black',
@@ -476,7 +411,6 @@ sub readin {
       -selectforeground=>$txtforeground,
       -selectbackground=>'#c0d0c0',
       -background=>$txtbackground,
-      -foreground=>$txtforeground,
       -borderwidth=>1,
       -width=>81,
       -height=>7, 
@@ -495,8 +429,6 @@ sub readin {
       -borderwidth=>'0',
       -relief=>'flat',
       -background=>$standout,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
       -width=>30,
       )->pack(
          -padx=>'0',
@@ -519,9 +451,6 @@ sub readin {
       -length=>92,    
       -troughcolor=>$troughbackground,    
       -background=>$standout,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
-      -font=>$windowfont,
       )->pack(
          -side=>'left',
          -padx=>1,
@@ -539,9 +468,6 @@ sub readin {
       -length=>92,    
       -troughcolor=>$troughbackground,    
       -background=>$standout,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
-      -font=>$windowfont,
       )->pack(
          -side=>'left',
          -padx=>1,
@@ -559,9 +485,6 @@ sub readin {
       -length=>92,    
       -troughcolor=>$troughbackground,    
       -background=>$standout,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
-      -font=>$windowfont,
       )->pack(
          -side=>'left',
          -padx=>1,
@@ -579,9 +502,6 @@ sub readin {
       -length=>92,
       -troughcolor=>$troughbackground,    
       -background=>$standout,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
-      -font=>$windowfont,
       )->pack(
          -side=>'left',
          -padx=>1,
@@ -599,9 +519,6 @@ sub readin {
       -length=>92,
       -troughcolor=>$troughbackground,    
       -background=>$standout,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
-      -font=>$windowfont,
       )->pack(
          -side=>'left',
          -padx=>1);
@@ -610,12 +527,9 @@ sub readin {
    #the username or initials entry
    $logframe5->Entry(
       -background=>$txtbackground,
-      -foreground=>$txtforeground,
       -width=>16,
       -borderwidth=>1,
       -relief=>'sunken',
-      -font=>$windowfont,
-      -highlightthickness=>0,
       -textvariable=>\$initials,
       )->pack(
          -pady=>7,
@@ -625,9 +539,6 @@ sub readin {
 
    $logframe5->Label(
       -text=>'Your Name:',
-      -background=>$background,
-      -foreground=>$txtforeground,
-      -font=>$windowfont,
       )->pack(
          -pady=>7,
          -padx=>6,
@@ -642,9 +553,6 @@ sub readin {
       -borderwidth=>'1',
       -width=>$buttonwidth,
       -background=>$buttonbackground,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
-      -font=>$windowfont,
       -command=>sub{&sel_submit},
       )->pack(
          -expand=>1,
@@ -658,9 +566,6 @@ sub readin {
       -borderwidth=>'1',
       -width=>$buttonwidth,
       -background=>$buttonbackground,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
-      -font=>$windowfont,
       -command=>sub{&edit},
       )->pack(
           -side=>'left',
@@ -672,9 +577,6 @@ sub readin {
       -borderwidth=>'1',
       -width=>$buttonwidth,
       -background=>$buttonbackground,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
-      -font=>$windowfont,
       -command=>sub{
        $prevlogsbutton->configure(-state=>'normal');
        system ("$archviewer \&");
@@ -689,9 +591,6 @@ sub readin {
       -borderwidth=>'1',
       -width=>$buttonwidth,
       -background=>$buttonbackground,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
-      -font=>$windowfont,
       -command=>sub{&archive},
       )->pack(
          -side=>'left',
@@ -703,9 +602,6 @@ sub readin {
       -borderwidth=>'1',
       -width=>$buttonwidth,
       -background=>$buttonbackground,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
-      -font=>$windowfont,
       -command=>sub{&reread},
       )->pack(
          -side=>'left',
@@ -717,9 +613,6 @@ sub readin {
       -borderwidth=>'1',
       -width=>$buttonwidth,
       -background=>$buttonbackground,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
-      -font=>$windowfont,
       -command=>sub{&search},
       )->pack(
          -side=>'left',
@@ -731,9 +624,6 @@ sub readin {
       -borderwidth=>'1',
       -width=>$buttonwidth,
       -background=>$buttonbackground,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
-      -font=>$windowfont,
       -command=>sub{&sel_help},
       )->pack(
          -side=>'left',
@@ -745,9 +635,6 @@ sub readin {
       -borderwidth=>'1',
       -width=>$buttonwidth,
       -background=>$buttonbackground,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
-      -font=>$windowfont,
       -command=>sub{&destroy_all},
       )->pack(
          -side=>'left',
@@ -755,72 +642,94 @@ sub readin {
          );
    &loadlines;    
    &colorize;  
+   &set_date_stamp;
    $entrylist->focus;
 }#sub readin
 
 sub loadlines {
-  ##############################################################
-  #built the display window, now lock and load the logfile
-    &pid_create;
-    open(logfile, $logfile) || die "Fatal Error - Can't open $logfile!";
-    @loglines=<logfile>;
-    close(logfile);
-    #release the lock on the logfile now that it has been loaded
-    &pid_remove;
+   ##############################################################
+   #built the display window, now lock and load the logfile
+   &pid_create;
+   open(logfile, $logfile) || die "Fatal Error - Can't open $logfile!";
+   @loglines=<logfile>;
+   close(logfile);
+   #release the lock on the logfile now that it has been loaded
+   &pid_remove;
 
-  $loglist->delete(0.1,'end');
-  foreach (@loglines) {
-      next if (/^\W*$/);
-      $_=&format_entries("$_",$wrap);
-      if (/^ *\+\>/) {
-         $loglist->insert('end',"\n$_");
-         }else{
-            $loglist->insert('end',"        $_");
-            } 
-      } #foreach loglines  
-    #remove the first line if it doesnt contain a word character  
-    $firstline=$loglist->get('0.0','2.0');
-    if ($firstline =~ /^\W+$/) {
+   $loglist->delete(0.1,'end');
+   foreach (@loglines) {
+   next if (/^\W*$/);
+   $_=&format_entries("$_",$wrap);
+   if (/^ *\+\>/) {
+      $loglist->insert('end',"\n$_");
+      }else{
+         $loglist->insert('end',"        $_");
+         } 
+   }#foreach loglines  
+   #remove the first line if it doesnt contain a word character  
+   $firstline=$loglist->get('0.0','2.0');
+   if ($firstline =~ /^\W+$/) {
       $loglist->delete('0.0','2.0');
-     }
-    #set the window title
-  ($year,$month,$day,$hour,$minute,$seconds)=split(",",`date '+%Y,%m,%d,%H,%M,%S'`);
-  $MW->configure(-title=>"Turnover Log as of $year$month$day $hour:$minute:$seconds"); 
-  }#sub loadlines
+      }
+   &set_date_stamp;
+}#sub loadlines
+
+sub set_newentry_icon {
+   $MW->iconname(' Data!! ');
+}#sub
+         
+sub set_normal_icon {
+   $MW->iconname('Turnover'); 
+}#sub
+   
+sub set_date_stamp {
+    #set the window title 
+    ($year,$month,$day,$hour,$minute,$seconds)=split(",",`date '+%Y,%m,%d,%H,%M,%S'`);
+    $MW->configure(-title=>"Turnover Log as of $year$month$day $hour:$minute:$seconds"); 
+}#sub     
 
 sub format_entries {
-  my ($line,$wrap)=@_;
-  $padding="                                                                                ";
-  local $Text::Wrap::columns=$wrap;
-  #wrap is slow, dont execute it unless we have to..
-  if (length($line) >$wrap) {
-     $line=wrap("","","$line");
-     }
-  $line=~ s/^ *\t+ */\t/;
-  $line=~ s/\n */\n/g;
-  $line=~ s/\t/\ \ \ \ \ \ \ \ /g;
-  #+> is a new entry marker
-  if ($line =~ /^[ \t]*\+\>/) {
-     #remove any preceeding spaces or tabs from the new entry designator
-     chomp $line;
-     $line=~ s/^[\t]*\+\>/\+\>/;
-     $line=~ s/^ *\+\>/\+\>/;
-     #ensure the entry designator is at least 80 characters for colorizing
-     $line=(substr("$line$padding",0,82)."\n");
-     }#if  ($line =~ /^[ \t]*\+\>/)
-  return "$line";
-}
+   my ($line,$wrap)=@_;
+   $padding="                                                                                ";
+   local $Text::Wrap::columns=$wrap;
+   #wrap is slow, dont execute it unless we have to..
+   if (length($line) >$wrap) {
+      $line=wrap("","","$line");
+      }
+   $line=~ s/^ *\t+ */\t/;
+   $line=~ s/\n */\n/g;
+   $line=~ s/\t/\ \ \ \ \ \ \ \ /g;
+   #+> is a new entry marker
+   if ($line =~ /^[ \t]*\+\>/) {
+      #remove any preceeding spaces or tabs from the new entry designator
+      chomp $line;
+      $line=~ s/^[\t]*\+\>/\+\>/;
+      $line=~ s/^ *\+\>/\+\>/;
+      #ensure the entry designator is at least 80 characters for colorizing
+      $line=(substr("$line$padding",0,82)."\n");
+      }#if  ($line =~ /^[ \t]*\+\>/)
+   return "$line";
+}#sub
 
 #reading the log on demand
 sub reread {
-   $rereadbutton->configure(-state=>'normal');
-   #lock the log file momentarily
-   &check_inuse;
-   return if ($fileclosed==0);
-   &loadlines;   
-   &colorize;  
-   $entrylist->focus;
-}
+   $tm=(stat($logfile))[9];
+   alarm $timer; # schedule alarm in $timer seconds 
+   if ($tm==$mtime) {
+      &set_date_stamp;
+      return;
+      }else{
+         &set_newentry_icon; 
+         $rereadbutton->configure(-state=>'normal');
+         #lock the log file momentarily
+         &check_inuse;
+         return if ($fileclosed==0);
+         &loadlines;   
+         &colorize;  
+         $entrylist->focus;
+         $mtime=$tm;
+         }#if else
+   }#sub reread
 
 # Confirm operator actions
 sub oper_confirm {
@@ -836,10 +745,7 @@ sub oper_confirm {
        -text=>$confirmtext,
        -borderwidth=>'1',
        -wraplength=>'5i',
-       -background=>$background,
        -fg=>$txtforeground, #must be fg and not foreground for text color
-       -highlightthickness=>0,
-       -font=>$windowfont,
        -bitmap=>'questhead',
        -default_button=>$defbutt,
        -buttons=>[@buttons],
@@ -847,9 +753,9 @@ sub oper_confirm {
    #the global option does a grab   
    $confirm=$confirmbox->Show(-global);
    return $confirm;
-} # sub oper_confirm
+} #sub oper_confirm
 
-# Add Log Entries 
+#Add Log Entries 
 sub sel_submit {
    $submitbutton->configure(-state=>'normal');
    if (!$initials) {
@@ -865,7 +771,8 @@ sub sel_submit {
    $newlines=$entrylist->get(0.1,"end");
    #do nothing if no words have been entered into log entry widget
    return if ($newlines =~ /^[\W\s]+$/);
-   #if the sliders are used , the values can be one digit, force them to 2 digits 
+   #if the sliders are used , the values can be one digit, force them to 2 digits so the 
+   #calculations will work properly.  This is important.
    $month=sprintf("%02d",$month);
    $day=sprintf("%02d",$day);
    $hour=sprintf("%02d",$hour);
@@ -960,23 +867,23 @@ sub colorize {
       #the persons name.  Do the longest one first
       $loglist->tag('add','fullident',$current,"$current + 1 line");
       $loglist->tag('configure','fullident',
-      -foreground=>'#002040',
-      -relief=>'raised',
-      -borderwidth=>1,
-      -background=>'#f1efe4',
-      );
+         -foreground=>'#002040',
+         -relief=>'raised',
+         -borderwidth=>1,
+         -background=>'#f1efe4',
+         );
       #now set the date string color
       $loglist->tag('add','yearmonth',$current,"$current + 19 char");
       $loglist->tag('configure','yearmonth',-foreground=>'#660024'); 
       $current=$loglist->index("$current + 1 char"); 
-      }
+      }#while (1)
 }#sub colorize
 
 sub edit {
-  #the edit button fails to return to its normal state - setting it manually
-  $editbutton->configure(-state=>'normal');
-  $confirm="OK";
-  $confirmtext="WARNING - WHEN YOU ARE IN MANUAL EDIT MODE, No OTHER 
+   #the edit button fails to return to its normal state - setting it manually
+   $editbutton->configure(-state=>'normal');
+   $confirm="OK";
+   $confirmtext="WARNING - WHEN YOU ARE IN MANUAL EDIT MODE, No OTHER 
 USER WILL NOT BE ABLE TO UPDATE THE TURNOVER LOG!\n
 Please do not use this mode any longer than absolutely necessary.";
    &oper_confirm("OK","Cancel",0);
@@ -1036,7 +943,7 @@ for new data.
             }#else
       &reread;
       }#$confirn eq yes
-} # sub archive
+}#sub archive
 
 #Search the Turnover Log File
 sub search {
@@ -1047,6 +954,11 @@ sub search {
    #width,height in pixels    
    $SW->minsize(424,55);
    $SW->maxsize(724,55);
+   $SW->optionAdd("*background","$background"); 
+   $SW->optionAdd("*foreground","$txtforeground");
+   $SW->optionAdd("*highlightThickness", "0");  
+   $SW->optionAdd("*font", "$windowfont"); 
+   
    #default to non case sensitive
    $caseflag="nocase";
    $newsearch=1;
@@ -1054,7 +966,7 @@ sub search {
    $searchframe1=$SW->Frame(
       -borderwidth=>'0',
       -relief=>'flat',
-      -background=>$background,
+      #-background=>$background,
       )->pack(
          -expand=>1,
          -fill=>'both',
@@ -1063,7 +975,7 @@ sub search {
    $searchframe2=$SW->Frame(
       -borderwidth=>'0',
       -relief=>'flat',
-      -background=>$background,
+      #-background=>$background,
       )->pack(
          -fill=>'x',
          -pady=>2,
@@ -1072,14 +984,11 @@ sub search {
    #the checkbox to allow toggling of the case sensitivity flag
    $searchframe1->Checkbutton(
       -variable=>\$caseflag,
-      -font=>$windowfont,
       -relief=>'flat',
       -text=>"Case",
-      -highlightthickness=>0,
       -highlightcolor=>'black',
       -activebackground=>$background,
       -bg=>$background,
-      -foreground=>$txtforeground,
       -borderwidth=>'1',
       -width=>6,
       -offvalue=>"nocase",
@@ -1099,14 +1008,11 @@ sub search {
       -dup=>0,
       -match => 1,  
       -justify=>'left',
-      -font=>$windowfont,
       -relief=>'sunken',
       -textvariable=>\$searchstring,
       -highlightthickness=>1,
       -highlightcolor=>'black',
       -highlightbackground=>$background,
-      -bg=>$background,
-      -foreground=>$txtforeground,
       -borderwidth=>1,
       -width=>12,
       -bg=> 'white',
@@ -1128,9 +1034,6 @@ sub search {
       -borderwidth=>'1',
       -width=>'10',
       -background=>$buttonbackground,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
-      -font=>$windowfont,
       -command=>sub {&find_one;},
       )->pack(
          -side=>'left',
@@ -1142,9 +1045,6 @@ sub search {
       -borderwidth=>'1',
       -width=>'10',
       -background=>$buttonbackground,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
-      -font=>$windowfont,
       -command=>sub {&find_all;},
       )->pack(
          -side=>'left',
@@ -1156,9 +1056,6 @@ sub search {
    -borderwidth=>'1',
    -width=>'10',
    -background=>$buttonbackground,
-   -foreground=>$txtforeground,
-   -highlightthickness=>0,
-   -font=>$windowfont,
    -command=>sub{$SW->destroy;&colorize}
    )->pack(
       -side=>'right',
@@ -1171,7 +1068,7 @@ sub search {
       $ssentry->history([@searchlist]);
       }
    $ssentry->focus;
-} # sub search
+}#sub search
 
 #update the search history array with any new strings entered into the
 #combobox widget.  Dont allow any duplicates
@@ -1182,7 +1079,7 @@ sub update_searchlist {
    @searchlist=grep(($Last eq $_ ? 0 : ($Last = $_, 1)),sort @searchlist);
    $ssentry->invoke;
    $ssentry->focus;
-}
+}#sub update_searchlist
 
 #search out and highlight any occurance of the specifed search string
 sub find_all {
@@ -1194,12 +1091,13 @@ sub find_all {
    $current='0.0';
    $stringlength=length($searchstring);
    $searchcount=0;
+   if ($caseflag eq "case") { 
+      $caseswitch="-exact";
+      }else{
+         $caseswitch="-nocase";
+         }
    while (1) {
-      if ($caseflag eq "case") {  
-         $current=$loglist->search(-exact,$searchstring,$current,'end');
-         }else{
-            $current=$loglist->search(-nocase,$searchstring,$current,'end');
-            }  
+      $current=$loglist->search($caseswitch,$searchstring,$current,'end');
       last if (!$current);
       $loglist->tag('add','search',$current,"$current + $stringlength char");
       $loglist->tag('configure','search',
@@ -1214,7 +1112,7 @@ sub find_all {
    $SW->configure(-title=>"$searchcount Matches");
    $searchcount=0;
    $current='0.0';
-}
+}#sub find_all
 
 #find and highlight one instance of a string at a time
 sub find_one {
@@ -1223,26 +1121,25 @@ sub find_one {
    $loglist->tag('remove','search', qw/0.0 end/);
    $loglist->tag('remove','fullident', qw/0.0 end/);
    $loglist->tag('remove','yearmonth', qw/0.0 end/);
+   if ($caseflag eq "case") { 
+      $caseswitch="-exact";
+      }else{
+         $caseswitch="-nocase";
+         }
    if ($searchstring ne $searchstringold || $newsearch==1) {
       $allcount=0;
       $tempcurrent='0.0';
-      $searchstringold=$searchstring;
+      $searchstringold=$searchstring;      
       while (1) {
-         if ($caseflag eq "case") {  
-            $tempcurrent=$loglist->search(-exact,$searchstring,$tempcurrent,'end');
-            }else{
-               $tempcurrent=$loglist->search(-nocase,$searchstring,$tempcurrent,'end');
-               }  
+         $tempcurrent=$loglist->search($caseswitch,$searchstring,$tempcurrent,'end');
          last if (!$tempcurrent);
          $allcount++;       
          $tempcurrent=$loglist->index("$tempcurrent + 1 char");
          $searchcount=0;
          $current='0.0';
-         }
+         }#while (1)
       $newsearch=0; 
-      }
-   #set the title to indicat the number of searches
-   $SW->configure(-title=>"$allcount Matches");  
+   }#if searchstring ne searchstingold...  
    #get the length of the search string so we can highlight the proper number
    #of characters
    $stringlength=length($searchstring);
@@ -1251,13 +1148,12 @@ sub find_one {
       $searchcount=0;
       } # if current
    my $currentold=$current;   
-   if ($caseflag eq "case") {  
-      $current=$loglist->search(-exact,$searchstring,"$current +1 char");
-      }else{
-         $current=$loglist->search(-nocase,$searchstring,"$current +1 char");
-         }  
+      $current=$loglist->search($caseswitch,$searchstring,"$current +1 char"); 
+   #set the title to indicat the number of searches
+   $SW->configure(-title=>"$allcount Matches"); 
+   
    if ($current eq "") {
-      $SW->configure(-title=>"No Matches");
+      $SW->configure(-title=>"0 Matches"); 
       return;
       }      
    $current=$loglist->index($current);
@@ -1270,7 +1166,7 @@ sub find_one {
       -relief=>'raised',
       );         
    $loglist->see($current);   
-} #sub find one
+}#sub find one
 
 #The help Window
 sub sel_help {
@@ -1281,12 +1177,15 @@ sub sel_help {
    #width,height in lines    
    $HW->minsize(88,25);
    $HW->maxsize(88,49);
-
+   $HW->optionAdd("*background","$background"); 
+   $HW->optionAdd("*foreground","$txtforeground");
+   $HW->optionAdd("*highlightThickness", "0");  
+   $HW->optionAdd("*font", "$windowfont");  
+   
    #The top frame for the text
    $helpframe1=$HW->Frame(
       -borderwidth=>'0',
       -relief=>'flat',
-      -background=>$background,
       )->pack(
          -expand=>1,
          -fill=>'both',
@@ -1295,7 +1194,6 @@ sub sel_help {
    $helpframe2=$HW->Frame(
       -borderwidth=>'0',
       -relief=>'flat',
-      -background=>$background,
       )->pack(
          -fill=>'x',
          );
@@ -1304,8 +1202,6 @@ sub sel_help {
    $hscrolly=$helpframe1->Scrollbar(
       -orient=>'vert',
       -elementborderwidth=>1,
-      -highlightthickness=>0,
-      -background=>$background,
       -troughcolor=>$troughbackground,
       -relief=>'flat',
       )->pack(
@@ -1316,8 +1212,6 @@ sub sel_help {
    $hscrollx=$helpframe1->Scrollbar(
       -orient=>'horiz',
       -elementborderwidth=>1,
-      -highlightthickness=>0,
-      -background=>$background,
       -troughcolor=>$troughbackground,
       -relief=>'flat',
       )->pack(
@@ -1328,10 +1222,7 @@ sub sel_help {
    $helpwin=$helpframe1->ROText(
       -yscrollcommand => ['set', $hscrolly],
       -xscrollcommand => ['set', $hscrollx],
-      -font=>$windowfont,
       -relief => 'sunken',
-      -highlightthickness=>0,
-      -foreground=>$txtforeground,
       -background=>$txtbackground,
       -borderwidth=>1, 
       -width=>90,
@@ -1352,15 +1243,11 @@ sub sel_help {
       -borderwidth=>'1',
       -width=>'10',
       -background=>$buttonbackground,
-      -foreground=>$txtforeground,
-      -highlightthickness=>0,
-      -font=>$windowfont,
       -command=>sub{$HW->destroy;}
       )->pack(
          -side=>'bottom',
          -padx=>2,
          );
-
 }#sub del_help
 
 # Kill any and all turnover windows if they exist
